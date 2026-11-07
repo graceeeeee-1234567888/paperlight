@@ -20,7 +20,7 @@ body.locked{overflow:hidden;background:white}body.locked #stage{position:fixed;i
 <section class="controls">
 <label class="upload">导入图片<input id="file" type="file" accept="image/*" hidden></label>
 <button id="minus" aria-label="缩小">−</button><button id="plus" aria-label="放大">＋</button>
-<label>步长 <select id="step"><option value="0.001">0.1%</option><option value="0.01">1%</option><option value="0.1">10%</option></select></label><output id="zoomLevel" aria-label="图片缩放比例"></output>
+<label>步长 <select id="step"><option value="0.00001">0.001%</option><option value="0.0001" selected>0.01%</option><option value="0.001">0.1%</option><option value="0.01">1%</option><option value="0.1">10%</option></select></label><output id="zoomLevel" aria-label="图片缩放比例"></output>
 <button id="fit">适合窗口</button>
 <button id="lock" class="primary">锁定描图</button>
 </section>
@@ -47,7 +47,7 @@ let calibration = 1, x = 0, y = 0, scale = 1, url, drag, hold;
 function draw() {
   art.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
   $('bar').style.width = (39 * mm * calibration) + 'px';
-  $('zoomLevel').textContent = (scale * 100).toFixed(2) + '%';
+  $('zoomLevel').textContent = (scale * 100).toFixed(3) + '%';
   $('pick').setAttribute('aria-pressed', String(picking));
   $('pick').textContent = picking ? '取消选点' : '选取两点';
   const [line, ...dots] = $('ruler').children;
@@ -62,7 +62,7 @@ function draw() {
   const distance = selectedDistance();
   line.style.display = distance ? '' : 'none';
   $('apply').disabled = !distance;
-  $('length').textContent = distance && calibrated ? '当前 ' + (distance * scale / (mm * calibration)).toFixed(2) + ' mm' : '';
+  $('length').textContent = distance && calibrated ? '当前 ' + (distance * scale / (mm * calibration)).toFixed(3) + ' mm' : '';
 }
 function center(newScale) {
   scale = newScale;
