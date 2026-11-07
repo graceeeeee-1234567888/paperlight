@@ -11,6 +11,7 @@ button,select,input,.upload{font:inherit;color:inherit;background:white;border:1
 button,.upload{cursor:pointer}.primary{background:#17644d;color:white;border-color:#17644d}input[type=number]{width:90px}
 .help{padding:0 16px 12px;font-size:14px}.guide{padding:0 16px 12px;overflow:auto}.bar{border:solid #172b25;border-width:0 2px 2px;height:12px;margin:2px 0 5px}
 #stage{height:65vh;background:white;position:relative;overflow:hidden;touch-action:none;border-top:1px solid #b6c8bf;cursor:grab}
+#ruler{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}body.locked #ruler{display:none}
 #art{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;user-select:none;-webkit-user-select:none}
 #unlock{display:none;position:fixed;right:16px;right:max(16px,env(safe-area-inset-right));top:16px;top:max(16px,env(safe-area-inset-top));z-index:2}
 body.locked{overflow:hidden;background:white}body.locked #stage{position:fixed;inset:0;height:auto;border:0;cursor:default}body.locked header,body.locked section{display:none}body.locked #unlock{display:block}
@@ -19,6 +20,7 @@ body.locked{overflow:hidden;background:white}body.locked #stage{position:fixed;i
 <section class="controls">
 <label class="upload">导入图片<input id="file" type="file" accept="image/*" hidden></label>
 <button id="minus" aria-label="缩小">−</button><button id="plus" aria-label="放大">＋</button>
+<label>步长 <select id="step"><option value="0.001">0.1%</option><option value="0.01">1%</option><option value="0.1">10%</option></select></label><output id="zoomLevel" aria-label="图片缩放比例"></output>
 <button id="fit">适合窗口</button>
 <button id="lock" class="primary">锁定描图</button>
 </section>
@@ -27,18 +29,40 @@ body.locked{overflow:hidden;background:white}body.locked #stage{position:fixed;i
 <button id="calibrate">校准屏幕</button><span id="status" role="status"></span>
 </section>
 <section class="guide"><div id="bar" class="bar"></div><small>用实体尺量上面两端刻线之间的距离。校准目标是 39 mm。</small></section>
-<section class="help">导入图片后，用 ＋／− 微调，再用尺核对图上的已知边长。拖动图纸定位，锁定后即可盖纸。PDF 可先截图再导入。</section>
-<div id="stage"><img id="art" alt="描图底稿" draggable="false" hidden></div>
+<section class="controls">
+<button id="pick" aria-pressed="false">选取两点</button>
+<label>目标长度 <input id="target" type="number" min="0.1" step="any" value="39" inputmode="decimal"> mm</label>
+<button id="apply" class="primary" disabled>按长度缩放</button><output id="length"></output>
+</section>
+<section class="help">先用实体尺校准屏幕，再点「选取两点」并依次点图上的两个端点。输入目标长度后点「按长度缩放」。PDF 可截图后导入。</section>
+<div id="stage"><img id="art" alt="描图底稿" draggable="false" hidden><svg id="ruler" aria-hidden="true"><line stroke="#17644d" stroke-width="2"/><circle r="5" fill="#17644d" stroke="white"/><circle r="5" fill="#17644d" stroke="white"/></svg></div>
 <button id="unlock" class="primary">长按解锁</button>
 <script>
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), art = $('art'), status = $('status');
 const mm = 96 / 25.4;
+let points = [], picking = false, calibrated = false;
 let calibration = 1, x = 0, y = 0, scale = 1, url, drag, hold;
 function draw() {
   art.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
   $('bar').style.width = (39 * mm * calibration) + 'px';
+  $('zoomLevel').textContent = (scale * 100).toFixed(2) + '%';
+  $('pick').setAttribute('aria-pressed', String(picking));
+  $('pick').textContent = picking ? '取消选点' : '选取两点';
+  const [line, ...dots] = $('ruler').children;
+  points.forEach((point, i) => {
+    const px = x + point.x * scale, py = y + point.y * scale;
+    dots[i].setAttribute('cx', px);
+    dots[i].setAttribute('cy', py);
+    line.setAttribute('x' + (i + 1), px);
+    line.setAttribute('y' + (i + 1), py);
+  });
+  dots.forEach((dot, i) => { dot.style.display = points[i] ? '' : 'none'; });
+  const distance = selectedDistance();
+  line.style.display = distance ? '' : 'none';
+  $('apply').disabled = !distance;
+  $('length').textContent = distance && calibrated ? '当前 ' + (distance * scale / (mm * calibration)).toFixed(2) + ' mm' : '';
 }
 function center(newScale) {
   scale = newScale;
@@ -49,15 +73,48 @@ function center(newScale) {
 function fit() {
   if (art.naturalWidth) center(Math.min((stage.clientWidth - 24) / art.naturalWidth, (stage.clientHeight - 24) / art.naturalHeight));
 }
+function selectedDistance() {
+  if (points.length !== 2) return 0;
+  return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+}
 function zoom(factor) {
-  const next = Math.max(0.02, Math.min(8, scale * factor));
+  if (!art.naturalWidth) return;
+  const next = scale * factor;
+  if (!(next >= 0.00001 && next <= 100)) return;
   const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
   x = cx + (x - cx) * next / scale;
   y = cy + (y - cy) * next / scale;
   scale = next;
   draw();
 }
-art.onload = () => { art.hidden = false; fit(); };
+art.onload = () => {
+  art.hidden = false;
+  points = [];
+  picking = false;
+  fit();
+};
+$('pick').onclick = () => {
+  if (!art.naturalWidth) { status.textContent = '请先导入图片。'; return; }
+  picking = !picking;
+  points = [];
+  status.textContent = picking ? '请点第一个端点。' : '';
+  draw();
+};
+$('apply').onclick = () => {
+  if (!calibrated) { status.textContent = '请先用实体尺校准屏幕。'; return; }
+  const target = $('target').valueAsNumber;
+  const distance = selectedDistance();
+  const next = target * mm * calibration / distance;
+  if (!(next >= 0.00001 && next <= 100)) {
+    status.textContent = '请输入有效目标长度，或重新选取端点。';
+    return;
+  }
+  scale = next;
+  x = stage.clientWidth / 2 - (points[0].x + points[1].x) / 2 * scale;
+  y = stage.clientHeight / 2 - (points[0].y + points[1].y) / 2 * scale;
+  status.textContent = '已按目标长度缩放。';
+  draw();
+};
 art.onerror = () => { status.textContent = '无法读取此图片，请试试 PNG 或 JPEG。'; };
 $('file').onchange = e => {
   const file = e.target.files[0];
@@ -68,8 +125,8 @@ $('file').onchange = e => {
   e.target.value = '';
 };
 $('fit').onclick = fit;
-$('plus').onclick = () => zoom(1.025);
-$('minus').onclick = () => zoom(1 / 1.025);
+$('plus').onclick = () => zoom(1 + Number($('step').value));
+$('minus').onclick = () => zoom(1 / (1 + Number($('step').value)));
 $('calibrate').onclick = () => {
   const measured = $('measured').valueAsNumber;
   if (!(measured >= 5 && measured <= 200)) {
@@ -82,12 +139,24 @@ $('calibrate').onclick = () => {
     return;
   }
   calibration = next;
+  calibrated = true;
   $('measured').value = '';
   draw();
   status.textContent = '已校准，请复量校准线。';
 };
 stage.onpointerdown = e => {
   if (document.body.classList.contains('locked') || drag) return;
+  if (picking) {
+    const rect = stage.getBoundingClientRect();
+    const point = {x:(e.clientX - rect.left - x) / scale, y:(e.clientY - rect.top - stage.clientTop - y) / scale};
+    if (point.x < 0 || point.y < 0 || point.x > art.naturalWidth || point.y > art.naturalHeight) return;
+    if (points.length && Math.hypot(point.x - points[0].x, point.y - points[0].y) * scale < 2) return;
+    points.push(point);
+    picking = points.length < 2;
+    status.textContent = picking ? '请点第二个端点。' : '已选中两点，可以按长度缩放。';
+    draw();
+    return;
+  }
   stage.setPointerCapture(e.pointerId);
   drag = {id:e.pointerId, x:e.clientX - x, y:e.clientY - y};
 };
