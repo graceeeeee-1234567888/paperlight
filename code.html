@@ -1,8 +1,8 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <title>纸光 PaperLight · 拷贝板</title>
 <style>
 *{box-sizing:border-box}
@@ -25,54 +25,106 @@ button:active,.upload:active{background:#e2ece8}
 #stage{height:calc(100vh - 120px);min-height:400px;background:#f4f7f6;position:relative;overflow:hidden;touch-action:none;cursor:grab}
 #stage:active{cursor:grabbing}
 #art{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;user-select:none;-webkit-user-select:none}
-#unlock{display:none;position:fixed;right:16px;right:max(16px,env(safe-area-inset-right));top:16px;top:max(16px,env(safe-area-inset-top));z-index:100;box-shadow:0 4px 14px rgba(0,0,0,0.25)}
+#unlock{
+  display:none;
+  position:fixed;
+  right:16px;
+  right:max(16px,env(safe-area-inset-right));
+  top:16px;
+  top:max(16px,env(safe-area-inset-top));
+  z-index:100;
+  box-shadow:0 4px 16px rgba(19,83,64,0.35);
+  border-radius:9999px;
+  padding:6px 16px 6px 10px;
+  min-height:44px;
+  gap:8px;
+  user-select:none;
+  -webkit-user-select:none;
+  transition:transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  touch-action:none;
+}
+#unlock.pressing{
+  transform:scale(0.96);
+  box-shadow:0 2px 8px rgba(19,83,64,0.4),0 0 16px rgba(78,205,159,0.35);
+}
+.unlock-ring{
+  width:24px;
+  height:24px;
+  transform:rotate(-90deg);
+  display:block;
+  flex-shrink:0;
+}
+.unlock-ring circle{
+  fill:none;
+  stroke-width:2.5;
+}
+.ring-bg{
+  stroke:rgba(255,255,255,0.25);
+}
+.ring-progress{
+  stroke:#5eead4;
+  stroke-linecap:round;
+  stroke-dasharray:63;
+  stroke-dashoffset:63;
+  transition:stroke-dashoffset 0.1s linear;
+}
+#unlock.pressing .ring-progress{
+  transition:stroke-dashoffset 850ms linear;
+  stroke-dashoffset:0;
+}
+#unlock.success{
+  background:#1e8466;
+  transform:scale(1.05);
+}
 body.locked{overflow:hidden;background:white}
 body.locked #stage{background:white;position:fixed;inset:0;height:auto;border:0;cursor:default}
 body.locked header,body.locked .controls,body.locked .help{display:none}
-body.locked #unlock{display:block}
+body.locked #unlock{display:inline-flex}
 </style>
 </head>
 <body>
 <header>
-  <h1>纸光 PaperLight</h1>
+<h1>纸光 PaperLight</h1>
 </header>
-<section class="controls" aria-label="描图工具栏">
-  <!-- 粗缩放 -->
-  <div class="btn-group">
-    <span class="group-label">粗</span>
-    <button id="minus" class="btn-mini" title="粗缩 5%">−</button>
-    <button id="plus" class="btn-mini" title="粗放 5%">+</button>
-  </div>
-
-  <!-- 细缩放 -->
-  <div class="btn-group">
-    <span class="group-label">细</span>
-    <button id="fineMinus" class="btn-mini" title="细缩 0.1%">−</button>
-    <button id="finePlus" class="btn-mini" title="细放 0.1%">+</button>
-  </div>
-
-  <!-- 当前比例 -->
-  <output id="zoomLevel" aria-label="当前缩放比例">100.000%</output>
-
-  <!-- 导入 -->
-  <label class="upload">导入<input id="file" type="file" accept="image/*" hidden></label>
-
-  <!-- 锁定描图 -->
-  <button id="lock" class="primary">锁定描图</button>
+<section aria-label="描图工具栏" class="controls">
+<!-- 粗缩放 -->
+<div class="btn-group">
+<span class="group-label">粗</span>
+<button class="btn-mini" id="minus" title="粗缩 5%">−</button>
+<button class="btn-mini" id="plus" title="粗放 5%">+</button>
+</div>
+<!-- 细缩放 -->
+<div class="btn-group">
+<span class="group-label">细</span>
+<button class="btn-mini" id="fineMinus" title="细缩 0.1%">−</button>
+<button class="btn-mini" id="finePlus" title="细放 0.1%">+</button>
+</div>
+<!-- 当前比例 -->
+<output aria-label="当前缩放比例" id="zoomLevel">100.000%</output>
+<!-- 导入 -->
+<label class="upload">导入<input accept="image/*" hidden="" id="file" type="file"/></label>
+<!-- 锁定描图 -->
+<button class="primary" id="lock">锁定描图</button>
 </section>
-
-<section class="help" id="status" role="status" hidden></section>
-<div id="stage"><img id="art" alt="描图底稿" draggable="false" hidden></div>
-<button id="unlock" class="primary">长按解锁</button>
-
+<section class="help" hidden="" id="status" role="status"></section>
+<div id="stage"><img alt="描图底稿" draggable="false" hidden="" id="art"/></div>
+<button aria-label="长按解锁" class="primary" id="unlock">
+<svg aria-hidden="true" class="unlock-ring" viewbox="0 0 24 24">
+<circle class="ring-bg" cx="12" cy="12" r="10"></circle>
+<circle class="ring-progress" cx="12" cy="12" id="ringProgress" r="10"></circle>
+</svg>
+<span>长按解锁</span>
+</button>
 <script>
 const $ = id => document.getElementById(id);
-const stage = $('stage'), art = $('art'), status = $('status');
+const stage = $('stage'), art = $('art'), status = $('status'), unlockBtn = $('unlock');
 function showStatus(message) {
   status.textContent = message;
   status.hidden = !message;
 }
 let x = 0, y = 0, scale = 1, url, drag, hold;
+const HOLD_DURATION = 850;
+
 function draw() {
   $('zoomLevel').textContent = (scale * 100).toFixed(3) + '%';
   art.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
@@ -128,26 +180,41 @@ function lock() {
   if (!art.naturalWidth) { showStatus('请先导入一张图片。'); return; }
   document.body.classList.add('locked');
   draw();
-  $('unlock').focus({preventScroll:true});
+  unlockBtn.focus({preventScroll:true});
 }
 function unlock() {
-  document.body.classList.remove('locked');
-  $('lock').focus({preventScroll:true});
+  unlockBtn.classList.add('success');
+  setTimeout(() => {
+    unlockBtn.classList.remove('success', 'pressing');
+    document.body.classList.remove('locked');
+    $('lock').focus({preventScroll:true});
+  }, 120);
+}
+function cancelHold() {
+  if (hold) {
+    clearTimeout(hold);
+    hold = null;
+  }
+  unlockBtn.classList.remove('pressing');
 }
 $('lock').onclick = lock;
-$('unlock').onpointerdown = e => {
-  $('unlock').setPointerCapture(e.pointerId);
-  hold = setTimeout(unlock, 650);
+unlockBtn.onpointerdown = e => {
+  unlockBtn.setPointerCapture(e.pointerId);
+  cancelHold();
+  unlockBtn.classList.add('pressing');
+  hold = setTimeout(() => {
+    hold = null;
+    unlock();
+  }, HOLD_DURATION);
 };
-$('unlock').onlostpointercapture = () => clearTimeout(hold);
-$('unlock').onpointerup = () => clearTimeout(hold);
-$('unlock').onpointercancel = () => clearTimeout(hold);
-$('unlock').oncontextmenu = e => e.preventDefault();
+unlockBtn.onlostpointercapture = cancelHold;
+unlockBtn.onpointerup = cancelHold;
+unlockBtn.onpointercancel = cancelHold;
+unlockBtn.oncontextmenu = e => e.preventDefault();
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.body.classList.contains('locked')) unlock();
-  if (e.target === $('unlock') && (e.key === 'Enter' || e.key === ' ')) unlock();
+  if (e.target === unlockBtn && (e.key === 'Enter' || e.key === ' ')) unlock();
 });
 draw();
 </script>
-</body>
-</html>
+</body></html>
