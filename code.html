@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>纸光 PaperLight · 拷贝板</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:16px system-ui,-apple-system,sans-serif;background:#f4f7f6;color:#17332c}
+header{padding:10px 14px;background:#14382e;color:white;display:flex;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:0.5px}
+.controls{padding:10px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;background:#fff;border-bottom:1px solid #e1e8e5}
+.btn-group{display:inline-flex;align-items:center;background:#edf3f0;border-radius:8px;padding:2px;gap:2px}
+.group-label{font-size:13px;font-weight:600;color:#2c5347;padding:0 6px;user-select:none}
+button,.upload{font:inherit;color:inherit;background:white;border:1px solid #b5cac1;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;min-height:38px;cursor:pointer;font-weight:500;transition:all 0.15s ease}
+button:active,.upload:active{background:#e2ece8}
+.btn-mini{padding:6px 10px;min-width:34px;border:none;background:white;border-radius:5px;box-shadow:0 1px 2px rgba(0,0,0,0.05)}
+.btn-mini:hover{background:#f8faf9}
+.btn-mini:active{background:#e3ebe7}
+#zoomLevel{font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:#17332c;margin-left:4px;min-width:76px}
+.upload{display:inline-flex;align-items:center;gap:4px;border-color:#b5cac1}
+.primary{background:#17644d;color:white;border-color:#17644d;margin-inline-start:auto;font-weight:600}
+.primary:hover{background:#135340}
+.help{padding:8px 12px;font-size:13px;color:#c0392b;background:#fdf2f2}
+#stage{height:calc(100vh - 120px);min-height:400px;background:#f4f7f6;position:relative;overflow:hidden;touch-action:none;cursor:grab}
+#stage:active{cursor:grabbing}
+#art{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;user-select:none;-webkit-user-select:none}
+#unlock{display:none;position:fixed;right:16px;right:max(16px,env(safe-area-inset-right));top:16px;top:max(16px,env(safe-area-inset-top));z-index:100;box-shadow:0 4px 14px rgba(0,0,0,0.25)}
+body.locked{overflow:hidden;background:white}
+body.locked #stage{background:white;position:fixed;inset:0;height:auto;border:0;cursor:default}
+body.locked header,body.locked .controls,body.locked .help{display:none}
+body.locked #unlock{display:block}
+</style>
+</head>
+<body>
+<header>
+  <h1>纸光 PaperLight</h1>
+</header>
+<section class="controls" aria-label="描图工具栏">
+  <!-- 粗缩放 -->
+  <div class="btn-group">
+    <span class="group-label">粗</span>
+    <button id="minus" class="btn-mini" title="粗缩 5%">−</button>
+    <button id="plus" class="btn-mini" title="粗放 5%">+</button>
+  </div>
+
+  <!-- 细缩放 -->
+  <div class="btn-group">
+    <span class="group-label">细</span>
+    <button id="fineMinus" class="btn-mini" title="细缩 0.1%">−</button>
+    <button id="finePlus" class="btn-mini" title="细放 0.1%">+</button>
+  </div>
+
+  <!-- 当前比例 -->
+  <output id="zoomLevel" aria-label="当前缩放比例">100.000%</output>
+
+  <!-- 导入 -->
+  <label class="upload">导入<input id="file" type="file" accept="image/*" hidden></label>
+
+  <!-- 锁定描图 -->
+  <button id="lock" class="primary">锁定描图</button>
+</section>
+
+<section class="help" id="status" role="status" hidden></section>
+<div id="stage"><img id="art" alt="描图底稿" draggable="false" hidden></div>
+<button id="unlock" class="primary">长按解锁</button>
+
+<script>
+const $ = id => document.getElementById(id);
+const stage = $('stage'), art = $('art'), status = $('status');
+function showStatus(message) {
+  status.textContent = message;
+  status.hidden = !message;
+}
+let x = 0, y = 0, scale = 1, url, drag, hold;
+function draw() {
+  $('zoomLevel').textContent = (scale * 100).toFixed(3) + '%';
+  art.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+}
+function center(newScale) {
+  scale = newScale;
+  x = (stage.clientWidth - art.naturalWidth * scale) / 2;
+  y = Math.max(12, (stage.clientHeight - art.naturalHeight * scale) / 2);
+  draw();
+}
+function fit() {
+  if (art.naturalWidth) center(Math.min((stage.clientWidth - 24) / art.naturalWidth, (stage.clientHeight - 24) / art.naturalHeight));
+}
+function zoom(factor) {
+  if (!art.naturalWidth) return;
+  const next = scale * factor;
+  if (!(next >= 0.00001 && next <= 100)) return;
+  const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+  x = cx + (x - cx) * next / scale;
+  y = cy + (y - cy) * next / scale;
+  scale = next;
+  draw();
+}
+art.onload = () => {
+  art.hidden = false;
+  showStatus('');
+  fit();
+};
+art.onerror = () => { showStatus('无法读取此图片，请试试 PNG 或 JPEG。'); };
+$('file').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (url) URL.revokeObjectURL(url);
+  url = URL.createObjectURL(file);
+  art.src = url;
+  e.target.value = '';
+};
+$('plus').onclick = () => zoom(1.05);
+$('minus').onclick = () => zoom(1 / 1.05);
+$('finePlus').onclick = () => zoom(1.001);
+$('fineMinus').onclick = () => zoom(1 / 1.001);
+stage.onpointerdown = e => {
+  if (document.body.classList.contains('locked') || drag) return;
+  stage.setPointerCapture(e.pointerId);
+  drag = {id:e.pointerId, x:e.clientX - x, y:e.clientY - y};
+};
+stage.onpointermove = e => {
+  if (drag?.id !== e.pointerId) return;
+  x = e.clientX - drag.x; y = e.clientY - drag.y; draw();
+};
+stage.onlostpointercapture = () => { drag = null; };
+function lock() {
+  if (!art.naturalWidth) { showStatus('请先导入一张图片。'); return; }
+  document.body.classList.add('locked');
+  draw();
+  $('unlock').focus({preventScroll:true});
+}
+function unlock() {
+  document.body.classList.remove('locked');
+  $('lock').focus({preventScroll:true});
+}
+$('lock').onclick = lock;
+$('unlock').onpointerdown = e => {
+  $('unlock').setPointerCapture(e.pointerId);
+  hold = setTimeout(unlock, 650);
+};
+$('unlock').onlostpointercapture = () => clearTimeout(hold);
+$('unlock').onpointerup = () => clearTimeout(hold);
+$('unlock').onpointercancel = () => clearTimeout(hold);
+$('unlock').oncontextmenu = e => e.preventDefault();
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('locked')) unlock();
+  if (e.target === $('unlock') && (e.key === 'Enter' || e.key === ' ')) unlock();
+});
+draw();
+</script>
+</body>
+</html>
